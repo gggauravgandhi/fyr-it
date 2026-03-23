@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AMOLED Burn-in</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+});
+
+ctx.fillStyle = '#000';
+ctx.fillRect(0, 0, W, H);
+
+let mx = -1000, my = -1000;
+let pmx = -1000, pmy = -1000;
+let isMoving = false;
+let idleTimer = null;
+
+window.addEventListener('mousemove', e => {
+  pmx = mx; pmy = my;
+  mx = e.clientX; my = e.clientY;
+  isMoving = true;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => { isMoving = false; }, 80);
+});
+
+function drawBurn(x, y, px, py) {
+  const dist = Math.hypot(x - px, y - py);
+  const steps = Math.max(1, Math.ceil(dist / 4));
+
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const ix = px + (x - px) * t;
+    const iy = py + (y - py) * t;
+
+    // Core bright white hotspot
+    const core = ctx.createRadialGradient(ix, iy, 0, ix, iy, 6);
+    core.addColorStop(0,   'rgba(255, 255, 255, 0.95)');
+    core.addColorStop(0.4, 'rgba(220, 235, 255, 0.55)');
+    core.addColorStop(1,   'rgba(160, 200, 255, 0)');
+    ctx.globalCompositeOperation = 'screen';
+    ctx.beginPath();
+    ctx.arc(ix, iy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = core;
+    ctx.fill();
+
+    // Outer phosphor halo
+    const halo = ctx.createRadialGradient(ix, iy, 0, ix, iy, 22);
+    halo.addColorStop(0,   'rgba(180, 210, 255, 0.22)');
+    halo.addColorStop(0.5, 'rgba(120, 170, 255, 0.08)');
+    halo.addColorStop(1,   'rgba(80, 130, 255, 0)');
+    ctx.beginPath();
+    ctx.arc(ix, iy, 22, 0, Math.PI * 2);
+    ctx.fillStyle = halo;
+    ctx.fill();
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawCursorDot(x, y) {
+  const ring = ctx.createRadialGradient(x, y, 0, x, y, 9);
+  ring.addColorStop(0,   'rgba(255,255,255,0)');
+  ring.addColorStop(0.6, 'rgba(255,255,255,0)');
+  ring.addColorStop(0.75,'rgba(255,255,255,0.8)');
+  ring.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.fillStyle = ring;
+  ctx.fill();
+}
+
+let lastTime = 0;
+
+function loop(ts) {
+  requestAnimationFrame(loop);
+
+  const dt = Math.min(ts - lastTime, 50);
+  lastTime = ts;
+
+  // Slow decay: paint near-black with very low alpha over everything
+  // This simulates the AMOLED burn slowly fading back to black
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = `rgba(0,0,0,${0.018 * (dt / 16)})`;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw burn trail when moving
+  if (isMoving) {
+    drawBurn(mx, my, pmx, pmy);
+  }
+
+  // Always draw cursor indicator
+  drawCursorDot(mx, my);
+}
+
+requestAnimationFrame(ts => { lastTime = ts; loop(ts); });
+</script>
+</body>
+</html>
